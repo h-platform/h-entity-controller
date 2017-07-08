@@ -7,7 +7,8 @@ var _ = require('lodash');
 
 var l = require(appRoot + '/logger');
 var seneca = require(appRoot + '/seneca_instance');
-var UrlProcesser = require('./UrlFilterProcessor');
+
+var UrlProcesser = require('../lib/UrlFilterProcessor');
 
 
 /*
@@ -160,7 +161,18 @@ module.exports = function(request, reply) {
           final_result[key] = value.records || value.record || values;
           return final_result;
         }, {});
-        reply(tray);
+        
+        var preReply = _.get(plugins, 'preReply',null);
+        if(_.isFunction(preReply)) {
+          preReply(request, reply, tray);
+        }
+
+        var execReply = _.get(plugins, 'reply',null);
+        if(_.isFunction(execReply)) {
+          return execReply(request, reply, tray);
+        }
+
+        return reply(tray);
     }).catch(function(err){
         console.log('QueryRecordsController Error', err);
         if(err.message == 'unauthorized') {

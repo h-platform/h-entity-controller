@@ -3,6 +3,9 @@ var Boom = require("boom");
 var inflect = require('i')();
 var Joi = require('joi');
 var promise = require('bluebird');
+var _ = require('lodash');
+
+var l = require(appRoot + '/logger');
 var seneca = require(appRoot + '/seneca_instance');
 
 
@@ -18,24 +21,24 @@ This library depends on plugin configuration of the route, example of a typical 
           strategy: 'session',
           mode: 'required'
       },
-      handler: entityController.deleteRecord,
+      handler: entityController.updateRecord,
       plugins: {
           model: 'group',
-          deleteRecord: {
+          updateRecord: {
               args: {
                   orderBy: 'group_name'
               },
               command: {
-                  role:'database', model: 'group', cmd:'deleteRecord', relations: ['image']
+                  role:'database', model: 'group', cmd:'updateRecord', relations: ['image']
               },
-              action: function(){
+              mainAction: function(){
                 return {
-                  role:'database', model: 'group', cmd:'deleteRecord', relations: ['image'], columns: ['id','group_name','group_info']
+                  role:'database', model: 'group', cmd:'updateRecord', relations: ['image'], columns: ['id','group_name','group_info']
                 };
               },
               sideActions: {
                 statuses: {
-                  role:'database', model: 'status', cmd:'deleteRecord', where:[{
+                  role:'database', model: 'status', cmd:'updateRecord', where:[{
                     col:'entity_type_id', op:'=', val:"3"
                   }]
                 }
@@ -56,35 +59,36 @@ module.exports = function(request, reply) {
   //8- send back results in specific format
   
   // check route.request.route.settings.plugins.model
-  assert(_.has(request,'route.settings.plugins.model'), 'route config path [route.settings.plugins.model] is undefined, cannot proceed with entitySenecaController.deleteRecord()');
+  assert(_.has(request,'route.settings.plugins.model'), 'route config path [route.settings.plugins.model] is undefined, cannot proceed with entitySenecaController.getRecord()');
 
   var plugins = request.route.settings.plugins;
   var model_name = plugins.model;
   var model_name_plural = inflect.pluralize(model_name);
 
-  var args = _.get(plugins, 'args',null);
-  var action = _.get(plugins, 'action',null);
-  var sideActions = _.get(plugins, 'sideActions',null);
+  var action = _.get(plugins, 'updateRecord.action',null);
+  var args = _.get(plugins, 'updateRecord.args',null);
+  var sideActions = _.get(plugins, 'updateRecord.sideActions',null);
 
-
-
-
-
-
-  // **************************************
   var seneca_actions = {};
   var seneca_main_action;
 
+
+
+
+
+  // ************************************** prepare main action
+  //define main action
   seneca_main_action = {
-    role:'database', model: model_name, cmd:'deleteRecord', id:request.params.id
+    role:'database', model: model_name, cmd:'updateRecord', record: request.payload, id:request.params.id
   };
 
-  if(_.isPlainObject(args)) {
+  // add argument to main seneca command
+  if(isPlainObject(args)) {
     _.extend(seneca_main_action, args);
   }
 
-  // call user defined method with action pattern, so user can modify the action finally before it is sent
-  if(_.isFunction(action)) {
+  // if plugins.action is function, then call it
+  if(_.isFunction(action)){
     action(request, reply, seneca_main_action);
   }
 
@@ -93,21 +97,18 @@ module.exports = function(request, reply) {
 
 
 
-
-
-
   // ************************************** side actions
   // merge sideActions with main seneca_actions
-  if(sideActions) {
-    _.extend(seneca_actions, sideActions);
+  if(_.isArray(sideActions)) {
+    seneca_actions = _.assign(seneca_actions, sideActions);
+  } else if(_.isFunction(sideActions)) {
+    action(request, reply, seneca_actions);
   }
 
 
 
 
-
-
-  // **************************************
+  // ************************************** seneca actions execution
   // transform seneca_commands into actual promises
   var seneca_promises = _.reduce(seneca_actions, function(final_result, value, key) {
     // value => command pattern
@@ -125,7 +126,7 @@ module.exports = function(request, reply) {
         }, {});
         reply(tray);
     }).catch(function(err){
-        console.log('deleteRecordController Error', err);
+        console.log('UpdateRecordController Error', err);
         if(err.message == 'unauthorized') {
             reply(Boom.unauthorized('you are unauthorized to manage system'));
         } else {

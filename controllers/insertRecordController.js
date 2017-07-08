@@ -66,7 +66,7 @@ module.exports = function(request, reply) {
   var model_name_plural = inflect.pluralize(model_name);
 
   var args = _.get(plugins, 'insertRecord.args',null);
-  var action = _.get(plugins, 'action',null);
+  var action = _.get(plugins, 'inesrtRecord.action',null);
   var sideActions = _.get(plugins, 'insertRecord.sideActions',null);
 
   var seneca_actions = {};
@@ -81,7 +81,7 @@ module.exports = function(request, reply) {
     role:'database', model: model_name, cmd:'insertRecord', record: request.payload
   };
 
-  if(args) {
+  if(_.isPlainObject(args)) {
     // add argument to main seneca command
     _.extend(seneca_main_action, args);
   }
@@ -97,11 +97,15 @@ module.exports = function(request, reply) {
 
 
 
+
   // ************************************** side actions
   // merge sideActions with main seneca_actions
-  if(sideActions) {
-    _.extend(seneca_actions, sideActions);
+  if(_.isArray(sideActions)) {
+    seneca_actions = _.assign(seneca_actions, sideActions);
+  } else if(_.isFunction(sideActions)) {
+    action(request, reply, seneca_actions);
   }
+
 
 
 
