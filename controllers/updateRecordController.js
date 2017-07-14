@@ -83,7 +83,7 @@ module.exports = function(request, reply) {
   };
 
   // add argument to main seneca command
-  if(isPlainObject(args)) {
+  if(_.isPlainObject(args)) {
     _.extend(seneca_main_action, args);
   }
 
